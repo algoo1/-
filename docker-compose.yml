@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  siglip2-server:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: siglip2-server
+    ports:
+      - "8000:8000"
+    environment:
+      - TRANSFORMERS_CACHE=/app/model_cache
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./model_cache:/app/model_cache
+      - ./logs:/app/logs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # اختياري: خدمة nginx للـ reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: siglip2-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - siglip2-server
+    restart: unless-stopped
+    profiles:
+      - production
+
+volumes:
+  model_cache:
+    driver: local
+  logs:
+    driver: local
+
+networks:
+  default:
+    driver: bridge
